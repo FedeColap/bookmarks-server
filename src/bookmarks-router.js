@@ -75,7 +75,7 @@ bookRouter
      // make sure we found a card
      if (!bookmark) {
           logger.error(`Bookmark with id ${id} not found.`);
-          return res.status(404).send('Card Not Found');
+          return res.status(404).send('Bookmark Not Found');
      }
 
      res.json(bookmark);
