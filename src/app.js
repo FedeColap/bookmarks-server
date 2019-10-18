@@ -7,6 +7,7 @@ const uuid = require('uuid/v4');
 const { NODE_ENV } = require('./config')
 const bookRouter = require('./bookmarks-router')
 const logger = require('./logger')
+const ArticlesService = require('./articles-service')
 
 const app = express()
 
@@ -27,6 +28,7 @@ app.use(function validateBearerToken(req, res, next) {
      // move to the next middleware
      next()
 })
+
 
 app.use(bookRouter)
 
