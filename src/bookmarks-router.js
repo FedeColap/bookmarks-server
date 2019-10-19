@@ -4,6 +4,7 @@ const logger = require('./logger')
 const ArticlesService = require('./articles-service')
 const bookRouter = express.Router()
 const bodyParser = express.json()
+const xss = require('xss')
 
 // const bookmarks = [
 //     {
@@ -22,6 +23,14 @@ const bodyParser = express.json()
 //     }
 // ]
 
+const sanitizeBookmark = bookmark => ({
+    id: bookmark.id,
+    title: xss(bookmark.title),
+    url: bookmark.url,
+    rating: bookmark.rating,
+    description: xss(bookmark.description)
+})
+
 bookRouter
     .route('/bookmarks')
     .get((req, res, next) => {
@@ -33,48 +42,68 @@ bookRouter
         })
         .catch(next)
     })
-    .post(bodyParser, (req, res) => {
-        const { title, url, rating, desc } = req.body;
+    .post(bodyParser, (req, res, next) => {
+        const { title, url, rating, description } = req.body
+        const newBookmark = { title, url, rating, description }
 
+        for (const [key, value] of Object.entries(newBookmark)) {
+            if (value == null) {
+                return res.status(400).json({
+                    error: { message: `Missing '${key}' in request body` }
+                })
+            }
+        }
+        ArticlesService.insertArticle(
+            req.app.get('db'),
+            newBookmark
+        )
+        .then(bookmark => {
+            res
+                .status(201)
+                .location(`/bookmarks/${bookmark.id}`)
+                .json(sanitizeBookmark(bookmark))
+        })
+        .catch(next)
 
-        if (!title) {
-            logger.error(`Title is required`);
-            return res.status(400).send('Invalid data');
-        }
-        if (!url) {
-            logger.error(`Url is required`);
-            return res.status(400).send('Invalid data');
-        }
-        if (!rating) {
-            logger.error(`Rating is required`);
-            return res.status(400).send('Invalid data');
-        }
-        // if (!desc) {
-        //      return desc = null; -----------it gives me "message": "Assignment to constant variable."
+        // if (!title) {
+        //     logger.error(`Title is required`);
+        //     return res.status(400).send('Invalid data');
         // }
-        if (!desc) {
-            logger.error(`Description is required`);
-            return res.status(400).send('Invalid data');
-        }
-        const id = uuid();
-        const bookmark = {
-            id,
-            title,
-            url, 
-            rating, 
-            desc
-        };
+        // if (!url) {
+        //     logger.error(`Url is required`);
+        //     return res.status(400).send('Invalid data');
+        // }
+        // if (!rating) {
+        //     logger.error(`Rating is required`);
+        //     return res.status(400).send('Invalid data');
+        // }
+        // // if (!desc) {
+        // //      return desc = null; -----------it gives me "message": "Assignment to constant variable."
+        // // }
+        // if (!description) {
+        //     logger.error(`Description is required`);
+        //     return res.status(400).send('Invalid data');
+        // }
+        // const id = uuid();
+        // const bookmark = {
+        //     id,
+        //     title,
+        //     url, 
+        //     rating, 
+        //     description
+        // };
             
-        bookmarks.push(bookmark);
+        // bookmarks.push(bookmark);
 
-        logger.info(`Bookmark with id ${id} created`);
+        // logger.info(`Bookmark with id ${id} created`);
 
-        res.status(201).location(`http://localhost:8000/list`).json(bookmark);
+        // res.status(201).location(`http://localhost:8000/list`).json(bookmark);
 
     })
 
 bookRouter
     .route('/bookmarks/:id')
+   
     .get((req, res, next) => {
         const { id } = req.params;
         // const bookmark = bookmarks.find(c => c.id == id);
@@ -86,6 +115,7 @@ bookRouter
         // }
 
         // res.json(bookmark);
+        //================================================================
         const knexInstance = req.app.get('db')
         ArticlesService.getById(knexInstance, id)
             .then(bookmark => {
@@ -97,18 +127,27 @@ bookRouter
                 res.json(bookmark)
             })
             .catch(next)
-    })
-    .delete((req, res) => {
-        const { id } = req.params;
-        const listIndex = bookmarks.findIndex(li => li.id == id);
-        if (listIndex === -1) {
-            logger.error(`Bookmark with id ${id} not found.`);
-            return res.status(404).send('Not Found');
-        }
-        bookmarks.splice(listIndex, 1);
         
-        logger.info(`Bookmark with id ${id} deleted.`);
-        res.status(204).end();
+    })
+    .delete((req, res, next) => {
+        ArticlesService.deleteArticle(
+            req.app.get('db'),
+            req.params.bookmark_id
+          )
+            .then(() => {
+              res.status(204).end()
+            })
+            .catch(next)
+        // const { id } = req.params;
+        // const listIndex = bookmarks.findIndex(li => li.id == id);
+        // if (listIndex === -1) {
+        //     logger.error(`Bookmark with id ${id} not found.`);
+        //     return res.status(404).send('Not Found');
+        // }
+        // bookmarks.splice(listIndex, 1);
+        
+        // logger.info(`Bookmark with id ${id} deleted.`);
+        // res.status(204).end();
     })
 
 module.exports = bookRouter

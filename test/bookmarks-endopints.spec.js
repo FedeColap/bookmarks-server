@@ -19,6 +19,8 @@ describe.only('Bookmarks Endpoints', function() {
 
     afterEach('cleanup', () => db('bookmarks').truncate())
 
+    //TEST I HAVE NOT EVEN CONSIDERED THE UNAUTHORIZED CASE----------------------------
+
     // describe(`Unauthorized requests`, () => {
     //     it(`responds with 401 Unauthorized for GET /bookmarks`, () => {
     //       return supertest(app)
@@ -96,6 +98,33 @@ describe.only('Bookmarks Endpoints', function() {
             })
         })
 
+        context(`Given an XSS attack article`, () => {
+            const maliciousBookmark = {
+                id: 911,
+                title: 'Naughty naughty very naughty <script>alert("xss");</script>',
+                url: 'https://www.hackers.com',
+                description: `Bad image <img src="https://url.to.file.which/does-not.exist" onerror="alert(document.cookie);">. But not <strong>all</strong> bad.`,
+                rating: 1,
+            }
+        
+            beforeEach('insert malicious article', () => {
+               return db
+                .into('bookmarks')
+                .insert([ maliciousBookmark ])
+            })
+        
+            it.skip('removes XSS attack content', () => {
+                return supertest(app)
+                  .get(`/bookmarks`)
+                  .set('Authorization', `Bearer ${process.env.API_TOKEN}`)
+                  .expect(200)
+                  .expect(res => {
+                    expect(res.body[0].title).to.eql('Naughty naughty very naughty &lt;script&gt;alert(\"xss\");&lt;/script&gt;')
+                    expect(res.body[0].description).to.eql(`Bad image <img src="https://url.to.file.which/does-not.exist">. But not <strong>all</strong> bad.`)
+                  })
+              })
+        })
+
         context(`Given no bookmarks`, () => {
             it(`responds with 404`, () => {
                 const bookmarkId = 123456
@@ -106,4 +135,127 @@ describe.only('Bookmarks Endpoints', function() {
             })
         })
     })
+
+    describe(`POST /bookmarks`, () => {
+        const requiredFields = ['title', 'url', 'description', 'rating']
+        requiredFields.forEach(field => {
+            const newBookmark = {
+                title: 'Test new bookmark',
+                url: 'http://www.examplebookmark.com',
+                rating: 4,
+                description: 'Test new bookmark description...'
+            }
+
+            it(`responds with 400 and an error message when the '${field}' is missing`, () => {
+                delete newBookmark[field] 
+                return supertest(app)
+                    .post('/bookmarks')
+                    .set('Authorization', `Bearer ${process.env.API_TOKEN}`)
+                    .send(newBookmark)
+                    .expect(400, {
+                        error: { message: `Missing '${field}' in request body` }
+                    })
+            })
+        })
+
+
+        it(`creates a bookmark, responding with 201 and the new bookmark`,  function() {
+            const newBookmark = {
+                   title: 'Test new bookmark',
+                   url: 'http://www.examplebookmark.com',
+                   rating: 4,
+                   description: 'Test new bookmark description...'
+            }
+            return supertest(app)
+                .post('/bookmarks')
+                .set('Authorization', `Bearer ${process.env.API_TOKEN}`)
+                .send(newBookmark)
+                .expect(201)
+                .expect(res => {
+                    expect(res.body.title).to.eql(newBookmark.title)
+                    expect(res.body.url).to.eql(newBookmark.url)
+                    expect(res.body.description).to.eql(newBookmark.description)
+                    expect(res.body).to.have.property('id')
+                    expect(res.headers.location).to.eql(`/bookmarks/${res.body.id}`)
+                })
+                .then(postRes =>
+                    supertest(app)
+                    .get(`/bookmarks/${postRes.body.id}`)
+                    .set('Authorization', `Bearer ${process.env.API_TOKEN}`)
+                    .expect(postRes.body)
+                )
+        })
+
+        context(`Given an XSS attack article`, () => {
+            const maliciousBookmark = {
+                id: 911,
+                title: 'Naughty naughty very naughty <script>alert("xss");</script>',
+                url: 'https://www.hackers.com',
+                description: `Bad image <img src="https://url.to.file.which/does-not.exist" onerror="alert(document.cookie);">. But not <strong>all</strong> bad.`,
+                rating: 1,
+            }
+        
+            it.skip('removes XSS attack content in POST', () => {
+                return supertest(app)
+                    .post('/bookmarks')
+                    .set('Authorization', `Bearer ${process.env.API_TOKEN}`)
+                    .send(maliciousBookmark)
+                    .expect(201)
+                    .expect(res => {
+                        expect(res.body.title).to.eql('Naughty naughty very naughty &lt;script&gt;alert(\"xss\");&lt;/script&gt;')
+                        expect(res.body.rating).to.eql(maliciousBookmark.rating)
+                        expect(res.body.url).to.eql('https://url.to.file.which/does-not.exist')
+                        expect(res.body.description).to.eql(`Bad image <img src="https://url.to.file.which/does-not.exist">. But not <strong>all</strong> bad.`)
+                        expect(res.body).to.have.property('id')
+                        expect(res.headers.location).to.eql(`/bookmarks/${res.body.id}`)
+                    })
+                    .then(postRes =>
+                        supertest(app)
+                        .get(`/bookmarks/${postRes.body.id}`)
+                        .set('Authorization', `Bearer ${process.env.API_TOKEN}`)
+                        .expect(postRes.body)
+                    )
+            })
+        })
+
+    })
+
+    describe(`DELETE /bookmarks/:bookmark_id`, () => {
+        context('Given there are bookmarks in the database', () => {
+            const testBookmarks = makeBookmarksArray()
+        
+            beforeEach('insert bookmarks', () => {
+                return db
+                    .into('bookmarks')
+                    .insert(testBookmarks)
+            })
+            
+            it('responds with 204 and removes the article', () => {
+                const idToRemove = 2
+                const expectedBookmarks = testBookmarks.filter(bm => bm.id !== idToRemove)
+                return supertest(app)
+                  .delete(`/bookmarks/${idToRemove}`)
+                  .set('Authorization', `Bearer ${process.env.API_TOKEN}`)
+                  .expect(204)
+                  .then(res =>
+                    supertest(app)
+                      .get(`/bookmarks`)
+                      .set('Authorization', `Bearer ${process.env.API_TOKEN}`)
+                      .expect(expectedBookmarks)
+                  )
+            })
+        })
+
+        context(`Given no bookmarks`, () => {
+            it(`responds with 404`, () => {
+                const bookmarkId = 123456
+                return supertest(app)
+                    .delete(`/bookmarks/${bookmarkId}`)
+                    .set('Authorization', `Bearer ${process.env.API_TOKEN}`)
+                    .expect(404, { error: { message: `bookmark doesn't exist` } })
+            })
+        })
+    })
+
+
 })
