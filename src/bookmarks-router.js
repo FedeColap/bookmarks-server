@@ -146,11 +146,11 @@ bookRouter
         
     })
     .delete((req, res, next) => {
-        ArticlesService.deleteArticle(
-            req.app.get('db'),
-            req.params.bookmark_id
-          )
+        const { id } = req.params;
+        const knexInstance = req.app.get('db')
+        ArticlesService.deleteArticle(knexInstance, id)
             .then(() => {
+                
               res.status(204).end()
             })
             .catch(next)
