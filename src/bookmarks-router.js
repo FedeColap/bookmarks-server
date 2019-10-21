@@ -1,3 +1,4 @@
+const path = require('path')
 const express = require('express')
 const uuid = require('uuid/v4');
 const logger = require('./logger')
@@ -60,7 +61,7 @@ bookRouter
         .then(bookmark => {
             res
                 .status(201)
-                .location(`/api/bookmarks/${bookmark.id}`)
+                .location(path.posix.join(req.originalUrl, `/${bookmark.id}`))
                 .json(sanitizeBookmark(bookmark))
         })
         .catch(next)
@@ -103,9 +104,23 @@ bookRouter
 
 bookRouter
     .route('/:id')
-   
-    .get((req, res, next) => {
+    .all((req, res, next) => {
         const { id } = req.params;
+        const knexInstance = req.app.get('db')
+            ArticlesService.getById(knexInstance, id)
+            .then(bookmark => {
+                if (!bookmark) {
+                   return res.status(404).json({
+                     error: { message: `Bookmark doesn't exist` }
+                   })
+                }
+                res.bookmark = bookmark // save the bookmark for the next middleware
+                next() // don't forget to call next so the next middleware happens!
+            })
+            .catch(next)
+    })
+    .get((req, res, next) => {
+        // const { id } = req.params;
         // const bookmark = bookmarks.find(c => c.id == id);
 
         // // make sure we found a card
@@ -116,17 +131,18 @@ bookRouter
 
         // res.json(bookmark);
         //================================================================
-        const knexInstance = req.app.get('db')
-        ArticlesService.getById(knexInstance, id)
-            .then(bookmark => {
-                if (!bookmark) {
-                    return res.status(404).json({
-                        error: { message: `Bookmark doesn't exist` }
-                    })
-                }
-                res.json(bookmark)
-            })
-            .catch(next)
+        // const knexInstance = req.app.get('db')
+        // ArticlesService.getById(knexInstance, id)
+        //     .then(bookmark => {
+        //         if (!bookmark) {
+        //             return res.status(404).json({
+        //                 error: { message: `Bookmark doesn't exist` }
+        //             })
+        //         }
+        //         res.json(bookmark)
+        //     })
+        //     .catch(next)
+        res.json(sanitizeBookmark(res.bookmark))
         
     })
     .delete((req, res, next) => {
@@ -148,6 +164,9 @@ bookRouter
         
         // logger.info(`Bookmark with id ${id} deleted.`);
         // res.status(204).end();
+    })
+    .patch((req, res) => {
+       res.status(204).end()
     })
 
 module.exports = bookRouter
