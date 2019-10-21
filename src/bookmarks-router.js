@@ -32,7 +32,7 @@ const sanitizeBookmark = bookmark => ({
 })
 
 bookRouter
-    .route('/bookmarks')
+    .route('/')
     .get((req, res, next) => {
         // res.json(bookmarks);
         const knexInstance = req.app.get('db')
@@ -60,7 +60,7 @@ bookRouter
         .then(bookmark => {
             res
                 .status(201)
-                .location(`/bookmarks/${bookmark.id}`)
+                .location(`/api/bookmarks/${bookmark.id}`)
                 .json(sanitizeBookmark(bookmark))
         })
         .catch(next)
@@ -102,7 +102,7 @@ bookRouter
     })
 
 bookRouter
-    .route('/bookmarks/:id')
+    .route('/:id')
    
     .get((req, res, next) => {
         const { id } = req.params;
@@ -151,3 +151,4 @@ bookRouter
     })
 
 module.exports = bookRouter
+
